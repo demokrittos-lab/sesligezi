@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sesli Gezi Rehberi</title>
+<style>
+:root{--bg:#f5efe3;--panel:#fffaf0;--ink:#2a2118;--muted:#6b5f50;--line:#dccfb8;--acc:#9a3f1a}
+@media (prefers-color-scheme:dark){:root{--bg:#17130f;--panel:#221c16;--ink:#efe6d6;--muted:#b3a58f;--line:#3a3026;--acc:#e08a5b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Segoe UI",system-ui,sans-serif;padding:16px;max-width:720px;margin-inline:auto}
+h1{font:700 1.7rem/1.2 Georgia,serif;margin:8px 0 2px}
+.sub{color:var(--muted);margin:0 0 14px}
+.ctl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:8px}
+.btn{background:var(--acc);color:var(--bg);border:0;border-radius:6px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn.alt{background:transparent;color:var(--ink);border:2px solid var(--ink);padding:7px 12px}
+.btn:focus-visible,.item:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+label{font-size:.9rem;color:var(--muted);display:flex;gap:6px;align-items:center}
+select{font:inherit;padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+#st{color:var(--muted);font-size:.92rem;min-height:1.4em;margin:6px 0 10px}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.item{width:100%;text-align:left;display:grid;grid-template-columns:1fr auto;gap:2px 10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 13px;font:inherit;color:var(--ink);cursor:pointer}
+.nm{font-weight:600}
+.dist{grid-row:1/3;grid-column:2;align-self:center;color:var(--acc);font-weight:700;white-space:nowrap}
+.ds{color:var(--muted);font-size:.88rem}
+dialog{width:min(92vw,680px);max-height:90vh;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:16px;overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.top{display:flex;justify-content:space-between;gap:10px;align-items:start}
+.top h2{font:700 1.35rem/1.25 Georgia,serif;margin:0}
+#img{width:100%;max-height:240px;object-fit:cover;border-radius:8px;margin:10px 0}
+#ext{white-space:pre-line;margin:10px 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.lnk{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.92rem}
+.lnk a{color:var(--acc);font-weight:600}
+.note{color:var(--muted);font-size:.82rem}
+footer{margin-top:20px;color:var(--muted);font-size:.8rem}
+</style>
+</head>
+<body>
+<h1>Sesli Gezi Rehberi</h1>
+<p class="sub">Yakınındaki tarihi yerleri bul, Vikipedi'den oku, sesli dinle.</p>
+<div class="ctl">
+  <button class="btn" id="go" type="button">Konumumu bul</button>
+  <label>Mesafe
+    <select id="rad"><option value="1000">1 km</option><option value="2000">2 km</option><option value="5000" selected>5 km</option><option value="10000">10 km</option></select>
+  </label>
+  <label><input type="checkbox" id="hist" checked> Sadece tarihi yerler</label>
+</div>
+<p id="st" role="status" aria-live="polite"></p>
+<ol class="list" id="list"></ol>
+
+<dialog id="dlg" aria-labelledby="dt">
+  <div class="top"><h2 id="dt"></h2><button class="btn alt" id="cl" type="button">Kapat</button></div>
+  <img id="img" alt="" hidden>
+  <p id="ext"></p>
+  <div class="row">
+    <button class="btn" id="play" type="button">Dinle</button>
+    <button class="btn alt" id="pause" type="button">Duraklat</button>
+    <button class="btn alt" id="stop" type="button">Durdur</button>
+    <label>Hız <select id="rate"><option value="0.85">Yavaş</option><option value="1" selected>Normal</option><option value="1.2">Hızlı</option></select></label>
+  </div>
+  <p class="note" id="vnote" hidden>Cihazında Türkçe ses bulunamadı. Ayarlardan bir Türkçe ses indirirsen daha doğru okunur.</p>
+  <div class="lnk"><a id="wp" target="_blank" rel="noopener">Vikipedi'de oku</a><a id="dir" target="_blank" rel="noopener">Yol tarifi</a></div>
+  <p class="note">Metin: Vikipedi, CC BY-SA 4.0.</p>
+</dialog>
+
+<footer>Konumun yalnızca yakın yerleri Vikipedi'den sorgulamak için gönderilir; kaydedilmez. Ekran kilitlenince sesli okuma durabilir, dinlerken ekran açık tutulur.</footer>
+
+<script>
+const API="https://tr.wikipedia.org/w/api.php";
+const HIST=/antik|ören|tarihi|tarihî|arkeolo|kale\b|kalesi|kaleleri|hisar|cami|mescit|müze|hamam|\bhan\b|hanı|köprü|türbe|kümbet|kilise|manastır|sinagog|saray|köşk|konak|höyük|surları|külliye|medrese|tiyatro|agora|odeon|kervansaray|bedesten|tapınak|anıt|mezar|nekropol|sarnıç|su kemeri|kule|çeşme|dünya mirası|unesco|akropol|tümülüs|bazilika|şapel|tabya|kışla/;
+const $=id=>document.getElementById(id);
+let me=null, acc=0, fetched=null, fetchedR=0, loading=false, places=[], watchId=null, cache={}, cur=null, wl=null;
+
+const rad=d=>d*Math.PI/180;
+function dist(a,b){
+  const x=rad(b.lon-a.lon)*Math.cos(rad((a.lat+b.lat)/2)), y=rad(b.lat-a.lat);
+  return Math.sqrt(x*x+y*y)*6371000;
+}
+const fmt=m=>m<1000?Math.round(m/10)*10+" m":(m/1000).toLocaleString("tr-TR",{maximumFractionDigits:1})+" km";
+const status=t=>{ $("st").textContent=t; };
+
+async function wiki(params){
+  const pages={}; let cont={};
+  for(let i=0;i<8;i++){
+    const u=new URL(API);
+    Object.entries({action:"query",format:"json",formatversion:2,origin:"*",...params,...cont}).forEach(([k,v])=>u.searchParams.set(k,v));
+    const r=await fetch(u); if(!r.ok) throw new Error("Vikipedi yanıt vermedi.");
+    const d=await r.json();
+    (d.query&&d.query.pages||[]).forEach(p=>{
+      const o=pages[p.pageid]||(pages[p.pageid]={title:p.title,categories:[]});
+      if(p.coordinates&&!o.coordinates) o.coordinates=p.coordinates;
+      if(p.description) o.description=p.description;
+      if(p.thumbnail) o.thumbnail=p.thumbnail;
+      if(p.extract) o.extract=p.extract;
+      if(p.categories) o.categories.push(...p.categories.map(c=>c.title));
+    });
+    if(!d.continue) break; cont=d.continue;
+  }
+  return Object.values(pages);
+}
+
+async function fetchPlaces(){
+  if(loading||!me) return;
+  loading=true; status("Yakındaki yerler aranıyor…");
+  const r=+$("rad").value;
+  try{
+    const res=await wiki({generator:"geosearch",ggscoord:me.lat+"|"+me.lon,ggsradius:r,ggslimit:80,ggsnamespace:0,
+      prop:"coordinates|description|categories|pageimages",cllimit:"max",colimit:"max",clshow:"!hidden",piprop:"thumbnail",pithumbsize:120});
+    places=res.filter(p=>p.coordinates&&p.coordinates[0]).map(p=>{
+      const c=p.coordinates[0];
+      const hay=(p.title+" "+(p.description||"")+" "+p.categories.join(" ")).toLocaleLowerCase("tr");
+      return {title:p.title,desc:p.description||"",lat:c.lat,lon:c.lon,h:HIST.test(hay)};
+    });
+    fetched={lat:me.lat,lon:me.lon}; fetchedR=r;
+  }catch(e){ status("Yerler alınamadı: "+e.message+" İnternet bağlantını kontrol et."); loading=false; return; }
+  loading=false; render();
+}
+
+function render(){
+  if(!me) return;
+  places.forEach(p=>{ p.d=dist(me,p); });
+  const all=places.slice().sort((a,b)=>a.d-b.d), hist=all.filter(p=>p.h);
+  let shown=$("hist").checked?hist:all, note="";
+  if($("hist").checked&&!hist.length&&all.length){ shown=all; note=" Tarihi yer bulunamadı, tüm yerler gösteriliyor."; }
+  const ul=$("list"); ul.textContent="";
+  shown.slice(0,50).forEach(p=>{
+    const li=document.createElement("li"), b=document.createElement("button");
+    b.type="button"; b.className="item";
+    [["nm",p.title],["ds",p.desc],["dist",fmt(p.d)]].forEach(([c,t])=>{ const s=document.createElement("span"); s.className=c; s.textContent=t; b.appendChild(s); });
+    b.addEventListener("click",()=>openPlace(p));
+    li.appendChild(b); ul.appendChild(li);
+  });
+  status(shown.length?`${shown.length} yer, en yakından uzağa. Konum doğruluğu yaklaşık ${Math.round(acc)} m.${note}`:"Bu mesafede yer bulunamadı. Mesafeyi artırmayı dene.");
+}
+
+function onPos(p){
+  me={lat:p.coords.latitude,lon:p.coords.longitude}; acc=p.coords.accuracy||0;
+  if(!fetched||dist(me,fetched)>400||+$("rad").value!==fetchedR) fetchPlaces(); else render();
+}
+function onErr(e){
+  status(e.code===1?"Konum izni verilmedi. Tarayıcı ayarlarından bu siteye konum izni ver ve tekrar dene.":"Konum alınamadı. Açık alanda tekrar dene.");
+}
+function locate(){
+  const q=new URLSearchParams(location.search);
+  if(q.get("lat")&&q.get("lon")){ onPos({coords:{latitude:+q.get("lat"),longitude:+q.get("lon"),accuracy:0}}); return; }
+  if(!navigator.geolocation){ status("Bu tarayıcı konum özelliğini desteklemiyor."); return; }
+  status("Konumun alınıyor…");
+  if(watchId!==null) navigator.geolocation.clearWatch(watchId);
+  watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+}
+
+async function openPlace(p){
+  cur=p; stopSpeech();
+  $("dt").textContent=p.title; $("ext").textContent="Yükleniyor…"; $("img").hidden=true; $("vnote").hidden=true;
+  $("wp").href="https://tr.wikipedia.org/wiki/"+encodeURIComponent(p.title.replace(/ /g,"_"));
+  $("dir").href=`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=walking`;
+  $("dlg").showModal();
+  try{
+    if(!cache[p.title]){
+      const r=(await wiki({prop:"extracts|pageimages",titles:p.title,redirects:1,exintro:1,explaintext:1,piprop:"thumbnail",pithumbsize:640}))[0]||{};
+      cache[p.title]={text:(r.extract||"").trim()||"Bu yer için Vikipedi'de kısa bir özet bulunamadı.",img:r.thumbnail&&r.thumbnail.source};
+    }
+    if(cur!==p) return;
+    $("ext").textContent=cache[p.title].text;
+    if(cache[p.title].img){ $("img").src=cache[p.title].img; $("img").hidden=false; }
+  }catch(e){ $("ext").textContent="Açıklama alınamadı. İnternet bağlantını kontrol et."; }
+}
+
+// Sesli okuma
+let voices=[];
+const loadVoices=()=>{ voices=speechSynthesis.getVoices(); };
+if("speechSynthesis" in window){ speechSynthesis.onvoiceschanged=loadVoices; loadVoices(); }
+const trVoice=()=>voices.find(v=>/^tr/i.test(v.lang));
+function chunks(t){
+  const out=[];
+  (t.match(/[^.!?…]+[.!?…]*\s*/g)||[t]).forEach(s=>{
+    s=s.trim();
+    while(s.length>220){ let i=s.lastIndexOf(" ",220); if(i<80) i=220; out.push(s.slice(0,i)); s=s.slice(i).trim(); }
+    if(s) out.push(s);
+  });
+  return out;
+}
+async function lock(){ try{ wl=await navigator.wakeLock.request("screen"); }catch(e){} }
+function unlock(){ if(wl){ wl.release().catch(()=>{}); wl=null; } }
+function speak(){
+  if(!("speechSynthesis" in window)){ $("vnote").textContent="Bu tarayıcı sesli okumayı desteklemiyor."; $("vnote").hidden=false; return; }
+  speechSynthesis.cancel(); $("pause").textContent="Duraklat";
+  const v=trVoice(); $("vnote").hidden=!!v||!voices.length;
+  const parts=chunks($("dt").textContent+". "+$("ext").textContent);
+  parts.forEach((c,i)=>{
+    const u=new SpeechSynthesisUtterance(c);
+    u.lang="tr-TR"; if(v) u.voice=v; u.rate=+$("rate").value;
+    if(i===parts.length-1) u.onend=unlock;
+    speechSynthesis.speak(u);
+  });
+  lock();
+}
+function stopSpeech(){ if("speechSynthesis" in window) speechSynthesis.cancel(); $("pause").textContent="Duraklat"; unlock(); }
+
+$("go").addEventListener("click",locate);
+$("rad").addEventListener("change",()=>{ if(me) fetchPlaces(); });
+$("hist").addEventListener("change",render);
+$("play").addEventListener("click",speak);
+$("stop").addEventListener("click",stopSpeech);
+$("pause").addEventListener("click",()=>{
+  if(!("speechSynthesis" in window)) return;
+  if(speechSynthesis.paused){ speechSynthesis.resume(); $("pause").textContent="Duraklat"; }
+  else { speechSynthesis.pause(); $("pause").textContent="Devam"; }
+});
+$("cl").addEventListener("click",()=>$("dlg").close());
+$("dlg").addEventListener("close",stopSpeech);
+</script>
+</body>
+</html>
