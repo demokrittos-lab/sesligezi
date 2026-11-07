@@ -8,6 +8,7 @@
 :root{--bg:#f5efe3;--panel:#fffaf0;--ink:#2a2118;--muted:#6b5f50;--line:#dccfb8;--acc:#9a3f1a}
 @media (prefers-color-scheme:dark){:root{--bg:#17130f;--panel:#221c16;--ink:#efe6d6;--muted:#b3a58f;--line:#3a3026;--acc:#e08a5b}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Segoe UI",system-ui,sans-serif;padding:16px;max-width:720px;margin-inline:auto}
 h1{font:700 1.7rem/1.2 Georgia,serif;margin:8px 0 2px}
 .sub{color:var(--muted);margin:0 0 14px}
@@ -19,9 +20,10 @@ label{font-size:.9rem;color:var(--muted);display:flex;gap:6px;align-items:center
 select{font:inherit;padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 #st{color:var(--muted);font-size:.92rem;min-height:1.4em;margin:6px 0 10px}
 .list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.item{width:100%;text-align:left;display:grid;grid-template-columns:1fr auto;gap:2px 10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 13px;font:inherit;color:var(--ink);cursor:pointer}
+.item{width:100%;text-align:left;display:grid;grid-template-columns:64px 1fr auto;gap:2px 12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 13px;font:inherit;color:var(--ink);cursor:pointer}
 .nm{font-weight:600}
-.dist{grid-row:1/3;grid-column:2;align-self:center;color:var(--acc);font-weight:700;white-space:nowrap}
+.th{width:64px;height:64px;border-radius:6px;object-fit:cover;background:var(--line);grid-row:1/3}
+.dist{grid-row:1/3;grid-column:3;align-self:center;color:var(--acc);font-weight:700;white-space:nowrap}
 .ds{color:var(--muted);font-size:.88rem}
 dialog{width:min(92vw,680px);max-height:90vh;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:16px;overflow:auto}
 dialog::backdrop{background:rgba(0,0,0,.55)}
@@ -57,8 +59,10 @@ footer{margin-top:20px;color:var(--muted);font-size:.8rem}
     <button class="btn" id="play" type="button">Dinle</button>
     <button class="btn alt" id="pause" type="button">Duraklat</button>
     <button class="btn alt" id="stop" type="button">Durdur</button>
+    <label>Ses <select id="voice"></select></label>
     <label>Hız <select id="rate"><option value="0.85">Yavaş</option><option value="1" selected>Normal</option><option value="1.2">Hızlı</option></select></label>
   </div>
+  <p class="note">Ses listesi cihazından gelir. iPhone'da daha doğal bir Türkçe ses için Ayarlar &gt; Erişilebilirlik &gt; Okunan İçerik &gt; Sesler &gt; Türkçe bölümünden gelişmiş bir ses indir. Android'de metin okuma ayarlarından Google Türkçe sesini seç.</p>
   <p class="note" id="vnote" hidden>Cihazında Türkçe ses bulunamadı. Ayarlardan bir Türkçe ses indirirsen daha doğru okunur.</p>
   <div class="lnk"><a id="wp" target="_blank" rel="noopener">Vikipedi'de oku</a><a id="dir" target="_blank" rel="noopener">Yol tarifi</a></div>
   <p class="note">Metin: Vikipedi, CC BY-SA 4.0.</p>
@@ -110,7 +114,7 @@ async function fetchPlaces(){
     places=res.filter(p=>p.coordinates&&p.coordinates[0]).map(p=>{
       const c=p.coordinates[0];
       const hay=(p.title+" "+(p.description||"")+" "+p.categories.join(" ")).toLocaleLowerCase("tr");
-      return {title:p.title,desc:p.description||"",lat:c.lat,lon:c.lon,h:HIST.test(hay)};
+      return {title:p.title,desc:p.description||"",img:(p.thumbnail&&p.thumbnail.source)||"",lat:c.lat,lon:c.lon,h:HIST.test(hay)};
     });
     fetched={lat:me.lat,lon:me.lon}; fetchedR=r;
   }catch(e){ status("Yerler alınamadı: "+e.message+" İnternet bağlantını kontrol et."); loading=false; return; }
@@ -127,6 +131,9 @@ function render(){
   shown.slice(0,50).forEach(p=>{
     const li=document.createElement("li"), b=document.createElement("button");
     b.type="button"; b.className="item";
+    const th=document.createElement(p.img?"img":"span"); th.className="th";
+    if(p.img){ th.src=p.img; th.alt=""; th.loading="lazy"; }
+    b.appendChild(th);
     [["nm",p.title],["ds",p.desc],["dist",fmt(p.d)]].forEach(([c,t])=>{ const s=document.createElement("span"); s.className=c; s.textContent=t; b.appendChild(s); });
     b.addEventListener("click",()=>openPlace(p));
     li.appendChild(b); ul.appendChild(li);
@@ -169,9 +176,18 @@ async function openPlace(p){
 
 // Sesli okuma
 let voices=[];
-const loadVoices=()=>{ voices=speechSynthesis.getVoices(); };
+const loadVoices=()=>{
+  voices=speechSynthesis.getVoices();
+  const tr=voices.filter(v=>/^tr/i.test(v.lang)), sel=$("voice");
+  sel.textContent="";
+  tr.forEach(v=>{ const o=document.createElement("option"); o.value=v.voiceURI; o.textContent=v.name; sel.appendChild(o); });
+  let saved=""; try{ saved=localStorage.getItem("voice")||""; }catch(e){}
+  const best=tr.find(v=>v.voiceURI===saved)||tr.find(v=>/premium|enhanced|gelişmiş|natural|neural|google/i.test(v.name))||tr[0];
+  if(best) sel.value=best.voiceURI;
+  sel.parentElement.hidden=!tr.length;
+};
 if("speechSynthesis" in window){ speechSynthesis.onvoiceschanged=loadVoices; loadVoices(); }
-const trVoice=()=>voices.find(v=>/^tr/i.test(v.lang));
+const trVoice=()=>voices.find(v=>v.voiceURI===$("voice").value);
 function chunks(t){
   const out=[];
   (t.match(/[^.!?…]+[.!?…]*\s*/g)||[t]).forEach(s=>{
@@ -198,6 +214,10 @@ function speak(){
 }
 function stopSpeech(){ if("speechSynthesis" in window) speechSynthesis.cancel(); $("pause").textContent="Duraklat"; unlock(); }
 
+$("voice").addEventListener("change",()=>{
+  try{ localStorage.setItem("voice",$("voice").value); }catch(e){}
+  if("speechSynthesis" in window&&speechSynthesis.speaking) speak();
+});
 $("go").addEventListener("click",locate);
 $("rad").addEventListener("change",()=>{ if(me) fetchPlaces(); });
 $("hist").addEventListener("change",render);
@@ -210,6 +230,7 @@ $("pause").addEventListener("click",()=>{
 });
 $("cl").addEventListener("click",()=>$("dlg").close());
 $("dlg").addEventListener("close",stopSpeech);
+locate();
 </script>
 </body>
 </html>
